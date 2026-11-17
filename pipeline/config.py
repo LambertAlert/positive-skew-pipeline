@@ -32,7 +32,7 @@ class LukFilters:
 @dataclass
 class Config:
     # data
-    api_key_env: List[str] = field(default_factory=lambda: ["MASSIVE_API_KEY", "POLYGON_API_KEY"])
+    api_key_env: List[str] = field(default_factory=lambda: ["MASSIVE_API_KEY"])
     base_url: str = "https://api.massive.com"
     cache_dir: str = "data/psp_cache"
     out_dir: str = "data/psp_out"

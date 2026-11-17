@@ -1,13 +1,13 @@
 """
 pipeline/massive_client.py
-Thin Massive (ex-Polygon) REST client with disk caching.
+Thin Massive REST client with disk caching.
 
 Endpoints used
 - /v2/aggs/grouped/locale/us/market/stocks/{date}   one call = every US ticker's daily bar (T,o,h,l,c,v,vw,n,t)
 - /v3/reference/tickers                              type=CS / ADRC, active true and false (paginated)
 - /v3/reference/tickers/{ticker}                     market_cap, weighted_shares_outstanding, sic_code
 
-The key is read from MASSIVE_API_KEY (or POLYGON_API_KEY). Bars are split-adjusted (adjusted=true);
+The key is read from MASSIVE_API_KEY. Bars are split-adjusted (adjusted=true);
 Massive does not adjust daily aggregates for dividends.
 """
 

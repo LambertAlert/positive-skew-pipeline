@@ -224,9 +224,9 @@ def run_tab(T, out_dir: Path):
         horizons = st.multiselect("Horizons", [3, 5, 7, 10, 21], default=[3, 5, 7, 10, 21], key="run_h")
         quick = st.checkbox("Faster backtest (126-session test blocks, 300K training rows)", value=True, key="run_quick")
     with c2:
-        key_set = bool(os.environ.get("MASSIVE_API_KEY") or os.environ.get("POLYGON_API_KEY"))
+        key_set = bool(os.environ.get("MASSIVE_API_KEY", "").strip())
         api_key = st.text_input("Massive API key", type="password", key="run_key",
-                                help="Used for this run only, not saved. Leave blank if MASSIVE_API_KEY or POLYGON_API_KEY is set.",
+                                help="Used for this run only, not saved. Leave blank if MASSIVE_API_KEY is set.",
                                 placeholder="set in environment" if key_set else "required for Massive runs")
         regime = st.text_input("War Room regime snapshot (optional)", value="", key="run_regime",
                                placeholder="../pivot-scanner/data/narrative_regime.parquet")
@@ -257,7 +257,7 @@ def run_tab(T, out_dir: Path):
         env = dict(os.environ)
         if api_key.strip():
             env["MASSIVE_API_KEY"] = api_key.strip()
-        if not mode.startswith("Synthetic") and not (env.get("MASSIVE_API_KEY") or env.get("POLYGON_API_KEY")):
+        if not mode.startswith("Synthetic") and not env.get("MASSIVE_API_KEY", "").strip():
             st.error("No Massive API key: enter it above or set MASSIVE_API_KEY.")
         else:
             out_dir.mkdir(parents=True, exist_ok=True)

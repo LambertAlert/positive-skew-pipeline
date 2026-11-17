@@ -31,7 +31,7 @@ jobs:
           restore-keys: psp-cache-
       - name: Run
         env:
-          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY || secrets.POLYGON_API_KEY }}
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
         run: |
           if [ "${{ github.event.schedule }}" = "0 12 * * 6" ] || [ "${{ inputs.mode }}" = "full" ]; then
             python -m pipeline.run --test-sessions 126 --max-train-rows 300000

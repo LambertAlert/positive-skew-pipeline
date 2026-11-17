@@ -6,7 +6,7 @@ run_massive.py — one-command launcher for the positive-skew pipeline on Massiv
     python run_massive.py --dashboard-only
     python run_massive.py --horizons 5 10 --test-sessions 126     (any pipeline.run option passes through)
 
-The API key comes from MASSIVE_API_KEY or POLYGON_API_KEY; if neither is set you're asked for it
+The API key comes from MASSIVE_API_KEY; if it isn't set you're asked for it
 (it is used for this run only, not saved). Results: data/psp_out/dashboard.html
 """
 
@@ -23,7 +23,7 @@ sys.path.insert(0, str(HERE))
 if __name__ == "__main__":
     args = sys.argv[1:]
     if "--dashboard-only" not in args and "--source" not in args:
-        if not (os.environ.get("MASSIVE_API_KEY") or os.environ.get("POLYGON_API_KEY")):
+        if not os.environ.get("MASSIVE_API_KEY", "").strip():
             key = getpass.getpass("Massive API key: ").strip()
             if not key:
                 sys.exit("No key given.")
