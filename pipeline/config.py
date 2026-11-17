@@ -56,7 +56,11 @@ class Config:
     # "relative": models learn the return over the sector ETF (rel_h) and whether a name beat the day's
     #             median universe member on that basis (dir_xs_h). "absolute": raw return and its sign.
     target_mode: str = "relative"
-    regime_path: str = "data/narrative_regime.parquet"   # War Room posture snapshot, used as a live overlay
+    # War Room posture snapshot (written by narrative_regime_model.py in LambertAlert/pivot-scanner),
+    # used as a live overlay. A URL is downloaded each run (cached in data/war_room/); a path is read as is.
+    regime_path: str = ("https://raw.githubusercontent.com/LambertAlert/pivot-scanner/main/"
+                        "data/narrative_regime.parquet")
+    regime_max_age_days: int = 4        # older snapshots are shown as stale
     horizons: List[int] = field(default_factory=lambda: [3, 5, 7, 10, 21])
     entry: str = "open"                 # "open" of day t (signal from t-1 close) or "close" of day t
     hit_thresholds: List[float] = field(default_factory=lambda: [0.005, 0.01, 0.02, 0.03])

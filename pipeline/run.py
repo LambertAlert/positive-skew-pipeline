@@ -240,10 +240,14 @@ def main(argv=None):
         lives.append(pr)
         log(f"live h={h}: {len(pr)} names, {int(pr['positive_skew'].sum())} positive-skew")
     live = pd.concat(lives, ignore_index=True)
-    regime = read_regime(cfg.regime_path)
+    regime = read_regime(cfg.regime_path, cfg.regime_max_age_days, log=log)
     live = apply_overlay(live, regime)
     meta["regime"] = regime
-    log(f"regime overlay: {regime.get('posture', 'no snapshot at ' + cfg.regime_path)}")
+    if regime.get("posture"):
+        log(f"regime overlay: {regime['posture']}" + (f" · entry mode {regime['entry_mode']}" if regime.get("entry_mode") else "")
+            + f" (as of {str(regime.get('generated_at'))[:16]}{', STALE — ignored' if regime.get('stale') else ''})")
+    else:
+        log(f"regime overlay: none (no snapshot at {cfg.regime_path})")
     live.to_parquet(out / "live_scores.parquet", index=False)
     live.to_csv(out / "live_scores.csv", index=False)
 

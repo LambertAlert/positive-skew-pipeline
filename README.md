@@ -62,7 +62,7 @@ python -m pytest -q tests/                 # 32 tests incl. leakage checks
 ```bash
 python run_massive.py --start 2023-01-03                 # pick the first scored day yourself
 python run_massive.py --backfill auto                    # also backfill the warm-up from yfinance (more scored history)
-python run_massive.py --regime-path ../pivot-scanner/data/narrative_regime.parquet
+python run_massive.py --regime-path ../pivot-scanner/data/narrative_regime.parquet   # local file instead of GitHub
 python run_massive.py --target-mode absolute             # raw-return training (v0.2 behaviour)
 python run_massive.py --calls-per-minute 5               # free tier
 python -m pipeline.run --source synthetic                # offline smoke test (no key)
@@ -157,18 +157,33 @@ separately and never trained on.
 
 ## Regime overlay (live)
 
-Relative scores say "best of today's universe", not "this makes money". Live scores read the War
-Room posture snapshot (`data/narrative_regime.parquet` from `narrative_regime_model.py`, path in
-`Config.regime_path` / `--regime-path`). Each positive-skew name gets a `trade_view`:
+Relative scores say "best of today's universe", not "this makes money". On every run the pipeline
+downloads the latest War Room snapshot, `data/narrative_regime.parquet` from
+[LambertAlert/pivot-scanner](https://github.com/LambertAlert/pivot-scanner), written by
+`narrative_regime_model.py`. It saves a copy in `data/war_room/`, which it falls back to if the
+download fails.
+
+- **Use a local file instead:** `--regime-path ../pivot-scanner/data/narrative_regime.parquet`
+- **Stale snapshots:** a snapshot older than 4 days is shown as stale and ignored.
+
+Each positive-skew name gets a `trade_view`:
 
 | Posture | View |
 |---|---|
 | BUY_RIP, BUY_DIP | ACTIONABLE |
 | NEUTRAL | SELECTIVE |
-| AVOID, or entry mode CASH | BEST OF WEAK TAPE |
-| no snapshot | NO REGIME DATA |
+| AVOID | BEST OF WEAK TAPE |
 
-The overlay isn't backtested; the posture history is too short.
+The War Room **entry mode** can only tighten the view:
+
+| Entry mode | View |
+|---|---|
+| CASH | BEST OF WEAK TAPE |
+| ANTICIPATION_ONLY | WATCH ONLY |
+| TIGHT_MA | ACTIONABLE · TIGHT MA |
+
+No snapshot gives NO REGIME DATA; a stale one gives STALE REGIME DATA. The dashboards show the
+posture, the entry mode and its reason. The overlay isn't backtested: the posture history is too short.
 
 ## IC screen
 

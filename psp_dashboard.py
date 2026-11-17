@@ -228,8 +228,10 @@ def run_tab(T, out_dir: Path):
         api_key = st.text_input("Massive API key", type="password", key="run_key",
                                 help="Used for this run only, not saved. Leave blank if MASSIVE_API_KEY is set.",
                                 placeholder="set in environment" if key_set else "required for Massive runs")
-        regime = st.text_input("War Room regime snapshot (optional)", value="", key="run_regime",
-                               placeholder="../pivot-scanner/data/narrative_regime.parquet")
+        regime = st.text_input("War Room regime snapshot", value="", key="run_regime",
+                               placeholder="default: latest from LambertAlert/pivot-scanner on GitHub",
+                               help="Leave blank to download the latest narrative_regime.parquet from pivot-scanner each run. "
+                                    "Or enter a local path, e.g. ../pivot-scanner/data/narrative_regime.parquet")
         backfill = st.checkbox("Backfill the feature warm-up from yfinance", value=False, key="run_bf",
                                help="More scored history on short plans; the backfill is used for warm-up only.")
     args = [sys.executable, "-m", "pipeline.run", "--out", str(out_dir)]
@@ -326,17 +328,22 @@ def main():
     st.caption(" · ".join(bits) + f" · built {m.get('generated', '')}")
     if m.get("source") == "synthetic":
         st.error("SYNTHETIC DATA — layout only, not market evidence.")
-    if R.get("posture"):
+    if R.get("posture") and R.get("stale"):
+        st.warning(f"War Room regime snapshot is {R.get('age_days')} days old (as of {str(R.get('generated_at'))[:16]}), so the "
+                   f"View column ignores it. Last posture was {R['posture']}. Check the War Room pipeline in pivot-scanner.")
+    elif R.get("posture"):
         txt = (f"War Room posture **{R['posture']}**"
                + (f" ({100 * R['posture_confidence']:.0f}% conf.)" if R.get("posture_confidence") is not None else "")
                + (f" · regime score {f(R.get('regime_score'), 2)}" if R.get("regime_score") is not None else "")
                + (f" · entry mode **{R['entry_mode']}**" if R.get("entry_mode") else "")
                + (f" · {R['current_state_name']}" if R.get("current_state_name") else "")
+               + (f" · as of {str(R['generated_at'])[:16]}" if R.get("generated_at") else "")
+               + (f"  \n_{R['entry_mode_reason']}_" if R.get("entry_mode_reason") else "")
                + " — flagged names are labelled for this tape in the View column.")
         (st.error if R["posture"] == "AVOID" else st.warning if R["posture"] == "NEUTRAL" else st.success)(txt)
     else:
-        st.warning("No War Room regime snapshot — rankings show which names should beat their sector, not whether "
-                   "to be active. Add one in the Run tab (regime snapshot path).")
+        st.warning("No War Room regime snapshot in this run — rankings show which names should beat their sector, not "
+                   "whether to be active. Runs download it from pivot-scanner on GitHub by default; re-run live scores to add it.")
 
     # shared slices --------------------------------------------------------------------------------
     LH = live[live["horizon"] == h]

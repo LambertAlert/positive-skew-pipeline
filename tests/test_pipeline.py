@@ -296,6 +296,9 @@ def test_regime_overlay():
     assert apply_overlay(live, {"posture": "AVOID"})["trade_view"].tolist() == ["BEST OF WEAK TAPE", ""]
     assert apply_overlay(live, {"posture": "BUY_DIP"})["trade_view"].iloc[0] == "ACTIONABLE"
     assert apply_overlay(live, {"posture": "BUY_RIP", "entry_mode": "CASH"})["trade_view"].iloc[0] == "BEST OF WEAK TAPE"
+    assert apply_overlay(live, {"posture": "BUY_DIP", "entry_mode": "ANTICIPATION_ONLY"})["trade_view"].iloc[0] == "WATCH ONLY"
+    assert apply_overlay(live, {"posture": "BUY_RIP", "entry_mode": "TIGHT_MA"})["trade_view"].iloc[0] == "ACTIONABLE · TIGHT MA"
+    assert apply_overlay(live, {"posture": "AVOID", "entry_mode": "ANTICIPATION_ONLY"})["trade_view"].iloc[0] == "BEST OF WEAK TAPE"
     assert apply_overlay(live, {})["trade_view"].iloc[0] == "NO REGIME DATA"
 
 
@@ -470,3 +473,42 @@ def test_out_of_plan_day_is_skipped(tmp_path):
     cl = MassiveClient(cfg, api_key="k", session=_PlanSess("2024-11-18"))
     assert cl.grouped_day("2024-11-15").empty
     assert not (tmp_path / "grouped" / "2024-11-15.parquet").exists()
+
+
+# ------------------------------------------------------------------ War Room regime snapshot
+def _regime_bytes(when):
+    import io
+    b = io.BytesIO()
+    pd.DataFrame([{"generated_at": when, "posture": "BUY_DIP", "posture_confidence": .56, "regime_score": .53,
+                   "entry_mode": "TIGHT_MA", "current_state_name": "Flight to Safety"}]).to_parquet(b)
+    return b.getvalue()
+
+
+def test_regime_downloaded_cached_and_fallback(tmp_path, monkeypatch):
+    from pipeline import overlay
+    monkeypatch.setattr(overlay, "CACHE", tmp_path / "war_room" / "narrative_regime.parquet")
+    now = pd.Timestamp.now().isoformat()
+
+    class Ok:
+        content = _regime_bytes(now)
+        def raise_for_status(self): pass
+    import requests
+    monkeypatch.setattr(requests, "get", lambda *a, **k: Ok())
+    r = overlay.read_regime("https://example/narrative_regime.parquet", log=lambda *_: None)
+    assert r["posture"] == "BUY_DIP" and r["entry_mode"] == "TIGHT_MA" and not r["stale"]
+    assert (tmp_path / "war_room" / "narrative_regime.parquet").exists()
+
+    def boom(*a, **k): raise requests.ConnectionError("offline")
+    monkeypatch.setattr(requests, "get", boom)
+    r2 = overlay.read_regime("https://example/narrative_regime.parquet", log=lambda *_: None)
+    assert r2["posture"] == "BUY_DIP"                                  # served from the cached copy
+
+
+def test_stale_regime_is_ignored(tmp_path):
+    from pipeline.overlay import read_regime, apply_overlay
+    p = tmp_path / "nr.parquet"
+    p.write_bytes(_regime_bytes((pd.Timestamp.now() - pd.Timedelta(days=9)).isoformat()))
+    r = read_regime(str(p), max_age_days=4)
+    assert r["stale"] and r["age_days"] >= 9
+    out = apply_overlay(pd.DataFrame({"positive_skew": [True]}), r)
+    assert out["trade_view"].iloc[0] == "STALE REGIME DATA"
