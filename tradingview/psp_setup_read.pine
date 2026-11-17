@@ -1,0 +1,129 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// PSP Setup Read — the per-stock reads from the positive-skew pipeline that TradingView can compute on one chart.
+//
+//   Luk screens   Premarket / Leader / Potent on the last completed bar, close > $9 (market cap not checked)
+//   Relative      RS line vs the sector ETF and its 8-week high, 63-bar return vs the ETF, IBD RS raw score
+//   Momentum      21-bar return, its 1st derivative (5-bar change) and 2nd derivative (acceleration)
+//   Volatility    HV20, its percentile vs the past 252 bars (> 70 = elevated), HV5 > HV20 transition
+//   Skew & tails  60-bar realized Bowley skew, moment skew, quantile tail weight (normal = 1.00) and excess kurtosis
+//   Climax        RVOL ≥ 3 or the highest volume in 63 bars; bars since and drift since; post-climax ≤ 5 bars
+//
+// The model's own outputs (P(beat), SkewScore, predicted ranges) need the ML pipeline and can't be built in Pine:
+// use the dashboard's "Copy tickers" list as a TradingView watchlist and read them there.
+// Designed for daily charts. Set the sector ETF to the name's benchmark (XLK, XLV, XLF, XLE, XLI, XLY, XLP, XLB,
+// XLU, XLRE, XLC) — the pipeline maps it from the SIC code.
+//@version=6
+indicator("PSP Setup Read", shorttitle = "PSP Read", overlay = true, max_bars_back = 300)
+
+etf = input.symbol("AMEX:XLK", "Sector ETF (benchmark)")
+showClimax = input.bool(true, "Mark climax-volume bars")
+shadePost = input.bool(false, "Shade the 5 bars after a climax")
+pos = input.string("bottom right", "Table position", options = ["top right", "bottom right", "bottom left", "top left"])
+
+// ───────────────────────────────────────────────────────── Luk screens (War Room lab LK_DEFAULTS, $9 floor)
+avgVol10 = ta.sma(volume, 10)
+pxvol = close * volume
+pxvol1w = close * math.sum(volume, 5)
+vol1w = ta.sma(high / low - 1, 5) * 100
+chgOpen = (close / open - 1) * 100
+ema21 = ta.ema(close, 21)
+ema50 = ta.ema(close, 50)
+priceOk = close > 9
+premarket = priceOk and avgVol10 > 500000 and pxvol > 50e6 and vol1w > 3.5
+leader = priceOk and avgVol10 > 500000 and pxvol1w > 300e6
+potent = priceOk and close > ema50 and close >= ema21 and vol1w > 3.5 and pxvol > 50e6 and math.abs(chgOpen) > 0.5
+
+// ───────────────────────────────────────────────────────── relative strength vs the sector ETF
+etfClose = request.security(etf, timeframe.period, close)
+rsLine = close / etfClose
+rs8w = rsLine / ta.highest(rsLine, 40)
+relMom63 = (close / close[63] - 1) - (etfClose / etfClose[63] - 1)
+ibdRaw = 0.4 * close / close[63] + 0.2 * close / close[126] + 0.2 * close / close[189] + 0.2 * close / close[252]
+
+// ───────────────────────────────────────────────────────── momentum and its derivatives
+mom21 = close / close[21] - 1
+roc1 = mom21 - mom21[5]
+roc2 = roc1 - roc1[5]
+
+// ───────────────────────────────────────────────────────── volatility regime
+ret = close / close[1] - 1
+hv20 = ta.stdev(ret, 20) * math.sqrt(252)
+hv5 = ta.stdev(ret, 5) * math.sqrt(252)
+hvPct = ta.percentrank(hv20, 252)
+hvElevated = hvPct > 70
+
+// ───────────────────────────────────────────────────────── realized skew and tails (60 bars)
+n = 60
+p10 = ta.percentile_linear_interpolation(ret, n, 10)
+p25 = ta.percentile_linear_interpolation(ret, n, 25)
+p50 = ta.percentile_linear_interpolation(ret, n, 50)
+p75 = ta.percentile_linear_interpolation(ret, n, 75)
+p90 = ta.percentile_linear_interpolation(ret, n, 90)
+bowley = p90 > p10 ? (p90 + p10 - 2 * p50) / (p90 - p10) : na
+tailW = p75 > p25 ? ((p90 - p10) / (p75 - p25)) / 1.9001 : na
+mu = ta.sma(ret, n)
+float m2 = 0.0
+float m3 = 0.0
+float m4 = 0.0
+if bar_index > n
+    for i = 0 to n - 1
+        d = ret[i] - mu
+        m2 += d * d
+        m3 += d * d * d
+        m4 += d * d * d * d
+    m2 /= n
+    m3 /= n
+    m4 /= n
+skew60 = m2 > 0 ? m3 / math.pow(m2, 1.5) : na
+kurt60 = m2 > 0 ? m4 / (m2 * m2) - 3 : na
+
+// ───────────────────────────────────────────────────────── climax volume
+rvol = volume / ta.sma(volume, 21)[1]
+climax = rvol >= 3 or volume >= ta.highest(volume, 63)
+sinceClimax = ta.barssince(climax)
+climaxClose = ta.valuewhen(climax, close, 0)
+drift = close / climaxClose - 1
+postClimax = not na(sinceClimax) and sinceClimax <= 5
+gapATR = (open - close[1]) / ta.atr(14)[1]
+
+plotshape(showClimax and climax, "Climax volume", shape.diamond, location.abovebar, color.new(#8b74e8, 0), size = size.tiny)
+bgcolor(shadePost and postClimax ? color.new(#8b74e8, 90) : na)
+
+// ───────────────────────────────────────────────────────── table
+cGood = #3fbf7f
+cBad = #e5534b
+cMid = #e8c547
+cTxt = color.white
+cDim = color.gray
+yn(bool b) => b ? "✓" : "✕"
+sg(float v, string f) => na(v) ? "—" : (v >= 0 ? "+" : "") + str.tostring(v, f)
+tlab(float t) => na(t) ? "" : t >= 1.15 ? "fat" : t <= 0.9 ? "thin" : "normal"
+
+tblPos = pos == "top right" ? position.top_right : pos == "bottom right" ? position.bottom_right : pos == "bottom left" ? position.bottom_left : position.top_left
+var table t = table.new(tblPos, 3, 14, bgcolor = color.new(#121722, 8), border_color = color.new(#232b3b, 0), border_width = 1)
+
+row(int r, string a, string b, color cb, string c) =>
+    table.cell(t, 0, r, a, text_color = cDim, text_size = size.small, text_halign = text.align_left)
+    table.cell(t, 1, r, b, text_color = cb, text_size = size.small)
+    table.cell(t, 2, r, c, text_color = cDim, text_size = size.small, text_halign = text.align_left)
+
+if barstate.islast
+    table.cell(t, 0, 0, "PSP read · " + syminfo.ticker, text_color = cTxt, text_size = size.small, text_halign = text.align_left)
+    table.cell(t, 1, 0, "", text_size = size.small)
+    table.cell(t, 2, 0, "vs " + etf, text_color = cDim, text_size = size.small)
+    row(1, "Luk Premarket", yn(premarket), premarket ? cGood : cDim, "vol1W " + str.tostring(vol1w, "0.0") + "%")
+    row(2, "Luk Leader", yn(leader), leader ? cGood : cDim, "$vol 1W " + str.tostring(pxvol1w / 1e6, "0") + "M")
+    row(3, "Luk Potent", yn(potent), potent ? cGood : cDim, "chg/open " + sg(chgOpen, "0.0") + "%")
+    row(4, "RS line vs 8W high", str.tostring(rs8w * 100, "0.0") + "%", rs8w >= 0.98 ? cGood : rs8w < 0.9 ? cBad : cMid, rs8w >= 0.999 ? "new high" : "")
+    row(5, "63-bar vs ETF", sg(relMom63 * 100, "0.0") + "%", relMom63 > 0 ? cGood : cBad, "IBD raw " + str.tostring(ibdRaw, "0.00"))
+    row(6, "Mom 21 · accel", sg(mom21 * 100, "0.0") + "%", mom21 > 0 ? cGood : cBad, "Δ " + sg(roc1 * 100, "0.0") + " · Δ² " + sg(roc2 * 100, "0.0"))
+    row(7, "HV20 percentile", str.tostring(hvPct, "0"), hvElevated ? cBad : cTxt, "HV20 " + str.tostring(hv20 * 100, "0") + "%" + (hv5 > hv20 ? " · rising" : ""))
+    row(8, "Bowley skew 60", sg(bowley, "0.00"), bowley > 0.05 ? cGood : bowley < -0.05 ? cBad : cTxt, "moment " + sg(skew60, "0.00"))
+    row(9, "Tail weight 60", na(tailW) ? "—" : str.tostring(tailW, "0.00"), tailW >= 1.15 ? #8b74e8 : cTxt, tlab(tailW) + " · kurt " + sg(kurt60, "0.0"))
+    row(10, "Climax", na(sinceClimax) ? "none" : str.tostring(sinceClimax) + " bars ago", postClimax ? #8b74e8 : cTxt, na(sinceClimax) ? "" : "drift " + sg(drift * 100, "0.0") + "%")
+    row(11, "RVOL today", str.tostring(rvol, "0.0") + "×", rvol >= 3 ? #8b74e8 : rvol >= 1.5 ? cMid : cTxt, "")
+    row(12, "Gap / ATR", sg(gapATR, "0.00"), math.abs(gapATR) >= 1 ? cMid : cTxt, "")
+    row(13, "Positive-skew lean", bowley > 0 and tailW >= 1.0 ? "right tail" : bowley < 0 and tailW >= 1.15 ? "left-tail risk" : "—", bowley > 0 and tailW >= 1.0 ? cGood : bowley < 0 and tailW >= 1.15 ? cBad : cDim, "realized, not predicted")
+
+alertcondition(climax, "PSP: climax volume", "{{ticker}}: climax volume (RVOL ≥ 3 or 63-bar high)")
+alertcondition(premarket or leader or potent, "PSP: passes a Luk screen", "{{ticker}}: passes a Luk screen")
