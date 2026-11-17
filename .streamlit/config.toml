@@ -1,0 +1,15 @@
+# Streamlit's own widgets (tables, inputs, alerts) follow this base theme. The dashboard's Theme
+# selector restyles the page and every chart; for the Paper theme, also switch Streamlit to Light
+# (⋮ menu → Settings → Theme) — the app then picks Paper by default.
+[theme]
+base = "dark"
+primaryColor = "#3b8fd9"
+backgroundColor = "#0b0f17"
+secondaryBackgroundColor = "#171d2a"
+textColor = "#e6ebf2"
+
+[server]
+headless = false
+
+[browser]
+gatherUsageStats = false

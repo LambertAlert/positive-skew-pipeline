@@ -1,0 +1,15 @@
+# data pulled or produced by runs (large; regenerate with run_massive.py)
+data/
+*.parquet
+run.log
+run.pid
+# python / tooling
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+# secrets
+.env
+*.key

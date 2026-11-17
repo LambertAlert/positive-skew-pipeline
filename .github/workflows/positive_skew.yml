@@ -1,0 +1,46 @@
+# Positive-skew pipeline on Massive data.
+# Weekly: full purged walk-forward (Sat 12:00 UTC).  Daily: live scores for the next session (M-F 23:00 UTC,
+# after the 22:15 macro job). Grouped bars are cached between runs so only new sessions are fetched.
+name: positive-skew
+# Manual only until you add the MASSIVE_API_KEY secret (Settings → Secrets → Actions) and decide on Actions
+# minutes (private repos: the weekly full run alone can take several hours). To schedule it, uncomment:
+#  schedule:
+#    - cron: "0 12 * * 6"     # Sat: full backtest
+#    - cron: "0 23 * * 1-5"   # weekdays: live scores
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "full or live"
+        default: "live"
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - uses: actions/cache@v4
+        with:
+          path: data/psp_cache
+          key: psp-cache-${{ github.run_id }}
+          restore-keys: psp-cache-
+      - name: Run
+        env:
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY || secrets.POLYGON_API_KEY }}
+        run: |
+          if [ "${{ github.event.schedule }}" = "0 12 * * 6" ] || [ "${{ inputs.mode }}" = "full" ]; then
+            python -m pipeline.run --test-sessions 126 --max-train-rows 300000
+          else
+            python -m pipeline.run --live-only
+          fi
+      - name: Commit outputs
+        run: |
+          git config user.name "github-actions"; git config user.email "actions@github.com"
+          git add -f data/psp_out/*.csv data/psp_out/meta.json data/psp_out/dashboard.html data/psp_out/live_scores.parquet || true
+          git commit -m "positive-skew outputs [ci skip]" || echo "nothing to commit"
+          git push
