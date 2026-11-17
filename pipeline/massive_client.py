@@ -42,7 +42,9 @@ class MassiveForbidden(MassiveError):
 class MassiveClient:
     def __init__(self, cfg: Config, api_key: Optional[str] = None, session=None):
         self.cfg = cfg
-        self.key = api_key or next((os.environ[k] for k in cfg.api_key_env if os.environ.get(k)), None)
+        src = next((k for k in cfg.api_key_env if os.environ.get(k)), None)
+        self.key_source = "argument" if api_key else (src or "none")
+        self.key = (api_key or (os.environ[src] if src else "") or "").strip().strip('"').strip("'") or None
         if not self.key:
             raise MassiveError(f"No API key: set one of {cfg.api_key_env}")
         if session is None:
@@ -77,6 +79,13 @@ class MassiveClient:
                 continue
             if r.status_code == 404:
                 return {}
+            if r.status_code == 401:
+                hint = (f"the key in {self.key_source}" if self.key_source in self.cfg.api_key_env else "the key you entered")
+                raise MassiveError(
+                    f"Massive rejected the API key (401: {r.text[:80]}). It came from {hint} "
+                    f"(starts '{self.key[:4]}…', {len(self.key)} chars). Check it on your Massive dashboard; "
+                    f"to change a saved one in PowerShell: setx {self.key_source if self.key_source in self.cfg.api_key_env else 'MASSIVE_API_KEY'} \"<real key>\" "
+                    f"and open a new terminal.")
             if r.status_code == 403:
                 raise MassiveForbidden(f"403 {url}: {r.text[:160]}")
             raise MassiveError(f"{r.status_code} {url}: {r.text[:200]}")

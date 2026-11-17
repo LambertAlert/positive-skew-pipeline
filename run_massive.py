@@ -29,7 +29,11 @@ if __name__ == "__main__":
                 sys.exit("No key given.")
             os.environ["MASSIVE_API_KEY"] = key
     from pipeline.run import main
-    main(args)
+    from pipeline.massive_client import MassiveError
+    try:
+        main(args)
+    except MassiveError as e:
+        sys.exit(f"\nMassive error: {e}")
     out = Path("data/psp_out/dashboard.html")
     if "--out" in args:
         out = Path(args[args.index("--out") + 1]) / "dashboard.html"
